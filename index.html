@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Конструктор иллюстраций</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Конструктор иллюстраций</h1>
+  <p class="topbar__hint">Соберите композицию из готовых объектов библиотеки: геометрия не меняется, меняются только цвета и расположение.</p>
+</header>
+
+<main class="layout">
+  <!-- ЛЕВАЯ КОЛОНКА: сборка -->
+  <aside class="col col--left" aria-label="Сборка композиции">
+    <section class="card" id="build-card">
+      <h2>Сборка</h2>
+      <div class="tabs" role="tablist" aria-label="Способ сборки">
+        <button type="button" class="tab is-active" role="tab" id="tab-metaphor" aria-selected="true" aria-controls="tabpanel-build" data-mode="metaphor">По метафоре</button>
+        <button type="button" class="tab" role="tab" id="tab-list" aria-selected="false" aria-controls="tabpanel-build" tabindex="-1" data-mode="list">По объектам</button>
+      </div>
+      <div id="tabpanel-build" role="tabpanel" aria-labelledby="tab-metaphor">
+        <label class="field">
+          <span class="field__label" id="text-label">Тема</span>
+          <textarea id="build-text" rows="2" aria-labelledby="text-label"></textarea>
+        </label>
+        <div class="chips" id="examples" aria-label="Примеры запросов"></div>
+
+        <div class="row">
+          <label class="field">
+            <span class="field__label">Формат</span>
+            <select id="sel-format"></select>
+          </label>
+        </div>
+
+        <div class="field">
+          <span class="field__label" id="size-label">Размер объектов</span>
+          <div class="seg" role="radiogroup" aria-labelledby="size-label" id="seg-size">
+            <button type="button" role="radio" aria-checked="false" data-size="S">S — мелкий</button>
+            <button type="button" role="radio" aria-checked="true" data-size="L">L — крупный</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Цветовая схема</span>
+          <div class="schemes schemes--compact" id="build-schemes"></div>
+        </div>
+
+        <div class="field">
+          <span class="field__label" id="decor-label">Декор фона</span>
+          <div class="seg" role="radiogroup" aria-labelledby="decor-label" id="seg-decor">
+            <button type="button" role="radio" aria-checked="true" data-decor="violet">Фиолетовый</button>
+            <button type="button" role="radio" aria-checked="false" data-decor="peach">Персиковый</button>
+            <button type="button" role="radio" aria-checked="false" data-decor="teal">Бирюзовый</button>
+            <button type="button" role="radio" aria-checked="false" data-decor="none">Нет</button>
+          </div>
+        </div>
+
+        <label class="check"><input type="checkbox" id="chk-bg"> <span>с фоновыми объектами</span></label>
+
+        <div class="field">
+          <span class="field__label" id="zone-label">Место под заголовок</span>
+          <div class="seg" role="radiogroup" aria-labelledby="zone-label" id="seg-zone">
+            <button type="button" role="radio" aria-checked="true" data-zone="">Нет</button>
+            <button type="button" role="radio" aria-checked="false" data-zone="left">Слева</button>
+            <button type="button" role="radio" aria-checked="false" data-zone="top">Сверху</button>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn--primary btn--wide" id="btn-build">Собрать</button>
+        <div class="explain" id="explain" aria-live="polite"></div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ЦЕНТР: холст и варианты -->
+  <section class="col col--center" aria-label="Холст">
+    <div class="card card--canvas">
+      <div class="canvas-head">
+        <h2>Холст</h2>
+        <div class="canvas-head__tools">
+          <button type="button" class="btn btn--small" id="btn-undo" aria-label="Отменить последнее действие" title="Отменить (Ctrl+Z)" disabled>&#8630; Отменить</button>
+          <button type="button" class="btn btn--small" id="btn-redo" aria-label="Повторить отменённое действие" title="Повторить (Ctrl+Y)" disabled>Повторить &#8631;</button>
+        </div>
+      </div>
+      <div class="canvas-wrap" id="canvas-wrap">
+        <div id="canvas" class="canvas" aria-label="Холст композиции"></div>
+      </div>
+      <p class="canvas-hint">Перетаскивайте объекты мышью. Стрелки — сдвиг (Shift — крупнее), Delete — удалить, Ctrl+D — дублировать, [ и ] — слои, Shift при повороте — шаг 15°.</p>
+    </div>
+
+    <div class="card">
+      <div class="strip-head">
+        <h2>Варианты раскладки</h2>
+        <button type="button" class="btn btn--small" id="btn-more">Ещё варианты</button>
+      </div>
+      <div class="strip" id="strip" role="listbox" aria-label="Варианты раскладки"></div>
+      <p class="muted" id="strip-empty" hidden>Нажмите «Собрать», чтобы получить варианты.</p>
+    </div>
+  </section>
+
+  <!-- ПРАВАЯ КОЛОНКА: свойства -->
+  <aside class="col col--right" aria-label="Свойства">
+    <section class="card" id="props-card">
+      <h2>Выбранный объект</h2>
+      <p class="muted" id="props-empty">Выберите объект на холсте, чтобы изменить его.</p>
+      <div id="props-body" hidden>
+        <p class="props-name" id="props-name"></p>
+        <div class="btn-grid">
+          <button type="button" class="btn btn--small" id="p-dup">Дублировать</button>
+          <button type="button" class="btn btn--small btn--danger" id="p-del">Удалить</button>
+          <button type="button" class="btn btn--small" id="p-raise" title="На слой выше (])">Выше</button>
+          <button type="button" class="btn btn--small" id="p-lower" title="На слой ниже ([)">Ниже</button>
+          <button type="button" class="btn btn--small" id="p-front">Наверх</button>
+          <button type="button" class="btn btn--small" id="p-back">Вниз</button>
+          <button type="button" class="btn btn--small" id="p-kind">Главный &#8596; фоновый</button>
+          <button type="button" class="btn btn--small" id="p-shift">Сменить цвета</button>
+        </div>
+        <div class="field">
+          <span class="field__label">Поворот, °</span>
+          <div class="range-row">
+            <input type="range" id="rot-range" min="-180" max="180" step="1" value="0" aria-label="Поворот объекта, градусы">
+            <input type="number" id="rot-num" min="-180" max="180" step="1" value="0" aria-label="Угол поворота, число">
+            <button type="button" class="btn btn--small" id="p-rot-reset">Сбросить поворот</button>
+          </div>
+        </div>
+      </div>
+      <div class="field field--scale">
+        <span class="field__label">Масштаб сцены <output id="scale-out">100%</output></span>
+        <input type="range" id="scale-range" min="20" max="300" step="1" value="100" aria-label="Масштаб сцены, проценты">
+        <span class="muted small">Один масштаб для всех объектов: пропорции между ними сохраняются.</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Библиотека</h2>
+      <div class="seg" role="radiogroup" aria-label="Тип добавляемого объекта" id="seg-libkind">
+        <button type="button" role="radio" aria-checked="true" data-kind="main">Главный</button>
+        <button type="button" role="radio" aria-checked="false" data-kind="bg">Фоновый</button>
+      </div>
+      <div class="lib" id="lib"></div>
+      <p class="muted small">Клик по объекту добавляет его в центр холста.</p>
+    </section>
+
+    <section class="card">
+      <h2>Палитры</h2>
+      <div class="schemes" id="schemes"></div>
+      <details class="details" id="pal-details">
+        <summary>Добавить свою палитру</summary>
+        <label class="field">
+          <span class="field__label">Название</span>
+          <input type="text" id="pal-name" placeholder="Моя палитра" maxlength="40">
+        </label>
+        <label class="field">
+          <span class="field__label">Цвета (6 или 8 в формате hex)</span>
+          <textarea id="pal-text" rows="3" spellcheck="false" placeholder="#D7CDF5 #AA9BF0 #7864D7&#10;#F9ECB0 #F9A3AA #FFE3E1"></textarea>
+        </label>
+        <p class="muted small">Сначала цвета фона (3, четвёртый — тёмный, по желанию), затем цвета объектов (3, четвёртый — белый, по желанию).</p>
+        <div class="btn-row">
+          <button type="button" class="btn btn--small btn--primary" id="pal-add">Добавить и применить</button>
+          <label class="btn btn--small file-btn">Загрузить JSON
+            <input type="file" id="pal-file" accept=".json,application/json,text/plain">
+          </label>
+        </div>
+        <p class="form-msg" id="pal-msg" role="alert" hidden></p>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>Экспорт</h2>
+      <div class="btn-grid">
+        <button type="button" class="btn btn--primary" id="ex-svg">Скачать SVG</button>
+        <button type="button" class="btn" id="ex-png">Скачать PNG</button>
+        <button type="button" class="btn" id="ex-copy">Копировать SVG</button>
+      </div>
+      <h3>Проект</h3>
+      <div class="btn-grid">
+        <button type="button" class="btn" id="pr-save">Сохранить проект</button>
+        <label class="btn file-btn">Открыть проект
+          <input type="file" id="pr-file" accept=".json,application/json">
+        </label>
+      </div>
+      <p class="muted small">SVG без растровых вставок: каждый объект в своей группе, слои открываются в Figma.</p>
+    </section>
+  </aside>
+</main>
+
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script src="data/library.js"></script>
+<script src="src/palette.js"></script>
+<script src="src/scene.js"></script>
+<script src="src/semantic.js"></script>
+<script src="src/layout.js"></script>
+<script src="src/editor.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

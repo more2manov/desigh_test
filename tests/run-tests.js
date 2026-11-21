@@ -119,6 +119,81 @@ test('тот же seed -> идентичный результат, разные 
   });
 });
 
+/** Занятость доступной области: Σ площади bbox главных объектов (внутри области) / площадь области. */
+function occupancy(r, f, zone) {
+  var a = IC.layout.zones(f.w, f.h, zone).area, sum = 0;
+  r.metrics.items.forEach(function (m) {
+    if (m.kind !== 'main') return;
+    var w = Math.min(m.box[2], a[2]) - Math.max(m.box[0], a[0]), h = Math.min(m.box[3], a[3]) - Math.max(m.box[1], a[1]);
+    sum += Math.max(0, w) * Math.max(0, h);
+  });
+  return sum / ((a[2] - a[0]) * (a[3] - a[1]));
+}
+function fmt(id) { return IC.scene.FORMATS.filter(function (x) { return x.id === id; })[0]; }
+var TITLED = [['og', 'left'], ['banner', 'top'], ['banner', 'left']];
+function run(f, zone, set, seed) {
+  return IC.layout.compose(lib, {
+    main: set.main.map(function (id) { return { id: id }; }), bg: set.bg.map(function (id) { return { id: id }; }),
+    format: f, titleZone: zone, seed: seed
+  });
+}
+
+test('og/banner с зоной заголовка: область занята плотно (средняя занятость >= 0.68, каждая >= 0.5)', function () {
+  TITLED.forEach(function (c) {
+    var f = fmt(c[0]), sum = 0, n = 0;
+    SETS.forEach(function (set) {
+      for (var seed = 1; seed <= 10; seed++) {
+        var o = occupancy(run(f, c[1], set, seed), f, c[1]);
+        assert(o >= 0.5, c.join('/') + ' ' + set.name + ' seed=' + seed + ': занятость ' + o.toFixed(2));
+        sum += o; n++;
+      }
+    });
+    assert(sum / n >= 0.68, c.join('/') + ': средняя занятость ' + (sum / n).toFixed(2));
+  });
+});
+
+test('og/banner с зоной заголовка: заголовок пуст, главный виден >= 95%', function () {
+  TITLED.forEach(function (c) {
+    var f = fmt(c[0]), z = IC.layout.zones(f.w, f.h, c[1]).title;
+    SETS.forEach(function (set) {
+      for (var seed = 1; seed <= 10; seed++) {
+        var r = run(f, c[1], set, seed);
+        r.metrics.items.forEach(function (m) {
+          var ix = Math.min(m.box[2], z[2]) - Math.max(m.box[0], z[0]), iy = Math.min(m.box[3], z[3]) - Math.max(m.box[1], z[1]);
+          assert(!(ix > 0.01 && iy > 0.01), c.join('/') + ' ' + m.objectId + ' в зоне заголовка (seed=' + seed + ')');
+          if (m.uid === r.primaryUid) assert(m.visibility >= 0.95, c.join('/') + ' главный виден ' + m.visibility.toFixed(2));
+        });
+      }
+    });
+  });
+});
+
+test('фон: на холсте >= 30% ширины и высоты и 35-65% площади (30 seed, все форматы и зоны)', function () {
+  var checked = 0, dropped = 0, total = 0;
+  IC.scene.FORMATS.forEach(function (f) {
+    [null, 'left', 'top'].forEach(function (zone) {
+      [SETS[1], SETS[2]].forEach(function (set) {
+        for (var seed = 1; seed <= 30; seed++) {
+          var r = run(f, zone, set, seed);
+          total += set.bg.length;
+          dropped += set.bg.length - r.scene.items.filter(function (it) { return it.kind === 'bg'; }).length;
+          r.metrics.items.forEach(function (m) {
+            if (m.kind !== 'bg') return;
+            var b = m.box, w = b[2] - b[0], h = b[3] - b[1];
+            var vw = (Math.min(b[2], f.w) - Math.max(b[0], 0)) / w, vh = (Math.min(b[3], f.h) - Math.max(b[1], 0)) / h;
+            var label = f.id + '/' + (zone || '-') + ' ' + m.objectId + ' seed=' + seed;
+            assert(vw >= 0.3 && vh >= 0.3, label + ': полоска, видно ' + vw.toFixed(2) + 'x' + vh.toFixed(2));
+            assert(vw * vh >= 0.35 - 1e-9 && vw * vh <= 0.65 + 1e-9, label + ': площадь ' + (vw * vh).toFixed(2));
+            checked++;
+          });
+        }
+      });
+    });
+  });
+  assert(checked > 300, 'проверено мало фоновых объектов: ' + checked);
+  console.log('       (фон: проверено ' + checked + ', не поставлено ' + dropped + ' из ' + total + ')');
+});
+
 test('одна раскладка укладывается в ~200 мс', function () {
   var t = Date.now(), N = 10;
   for (var i = 0; i < N; i++) IC.layout.compose(lib, { main: [{ id: 'lamp' }, { id: 'headphones' }, { id: 'phone' }], bg: [{ id: 'puzzle' }, { id: 'wallet' }], format: { w: 1080, h: 1350 }, seed: i });

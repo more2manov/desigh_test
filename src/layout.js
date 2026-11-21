@@ -22,6 +22,10 @@
   var TITLE_TOP = 0.35;       // зона заголовка сверху: y < 0.35 * H
   var OVERHANG = 0.2;         // сколько неглавный объект может выйти за край холста (доля размера)
   var OVERHANG_PRIMARY = 0.03;
+  var FILL_TITLED = [0.62, 0.74, 0.84];   // заполнение области при зоне заголовка: 1, 2, 3+ главных
+  var CAP_TITLED = 1.03;      // крупнейший объект при зоне заголовка: до 103% области по оси (допуск выхода главного за край; в зону не заходит)
+  var BG_MIN_AREA = 0.355, BG_MAX_AREA = 0.645;  // видимая доля площади фона (допуск 35–65% с запасом на округление)
+  var BG_MIN_SIDE = 0.31;     // видимая доля ширины и высоты фонового объекта (не меньше)
   var SAMPLES = 500;
   var REFINE_STARTS = 4;
   var REFINE_STEPS = 90;
@@ -129,15 +133,20 @@
 
   /* ---------- главные объекты ---------- */
 
-  function fillFor(n) { return n <= 1 ? 0.45 : n === 2 ? 0.5 : 0.58; }
+  function fillFor(n, titled) {
+    if (titled) return n <= 1 ? FILL_TITLED[0] : n === 2 ? FILL_TITLED[1] : FILL_TITLED[2];
+    return n <= 1 ? 0.45 : n === 2 ? 0.5 : 0.58;
+  }
 
-  /** Общий масштаб: Σ(w·h)·s² ≈ fill·area, самый крупный объект ≤ 0.9 области по любой оси. */
-  function commonScale(dims, areaRect) {
+  /** Общий масштаб: Σ(w·h)·s² ≈ fill·area, самый крупный объект ≤ 0.9 области по любой оси
+   *  (с зоной заголовка titled=true: заполнение выше, предел по оси CAP_TITLED). */
+  function commonScale(dims, areaRect, titled) {
     var aw = areaRect[2] - areaRect[0], ah = areaRect[3] - areaRect[1];
     var sum = 0, maxW = 0, maxH = 0;
     dims.forEach(function (d) { sum += d.w * d.h; maxW = Math.max(maxW, d.w); maxH = Math.max(maxH, d.h); });
-    var s = Math.sqrt(fillFor(dims.length) * aw * ah / sum);
-    s = Math.min(s, 0.9 * aw / maxW, 0.9 * ah / maxH);
+    var s = Math.sqrt(fillFor(dims.length, titled) * aw * ah / sum);
+    var cap = titled ? CAP_TITLED : 0.9;
+    s = Math.min(s, cap * aw / maxW, cap * ah / maxH);
     return Math.round(s * 100000) / 100000;
   }
 
@@ -236,7 +245,6 @@
     bgDims.forEach(function (d) {
       var best = null;
       for (var t = 0; t < 400; t++) {
-        var lo = t < 250 ? 0.35 : 0.2, hi = t < 250 ? 0.65 : 0.8;
         var x, y, mode = rnd();
         var f1 = 0.4 + rnd() * 0.3, fx = 0.6 + rnd() * 0.2, fy = 0.6 + rnd() * 0.2;
         if (mode < 0.5) {                                   // угол
@@ -254,17 +262,18 @@
         var b = boxOf(x, y, d.w, d.h);
         if (c.title && inter(b, c.title) > 0) continue;
         var vf = canvasFraction(b, W, H);
-        if (vf < lo || vf > hi) continue;
+        if (vf < BG_MIN_AREA || vf > BG_MAX_AREA) continue;
+        // не тонкая полоска у края: видимая часть >= 30% ширины и высоты объекта
+        if ((Math.min(b[2], W) - Math.max(b[0], 0)) < BG_MIN_SIDE * d.w || (Math.min(b[3], H) - Math.max(b[1], 0)) < BG_MIN_SIDE * d.h) continue;
         var cb = core(b), vis = inter(cb, [0, 0, W, H]), pen = 0, i;
         for (i = 0; i < mainCores.length; i++) pen += inter(cb, mainCores[i]) / Math.max(1, vis);
         for (i = 0; i < placed.length; i++) pen += 3 * inter(cb, placed[i]) / Math.max(1, vis);
         var far = Math.hypot((x - mcx) / W, (y - mcy) / H);
         var score = pen * 2 - far + rnd() * 0.15;
         if (!best || score < best.score) best = { x: x, y: y, box: b, score: score };
-        if (t >= 250 && best) break;
       }
       if (best) { placed.push(core(best.box)); out.push({ x: best.x, y: best.y, box: best.box }); }
-      else out.push(null);
+      else out.push(null);                                  // подходящего места нет — объект не ставим
     });
     return out;
   }
@@ -284,7 +293,7 @@
 
     var mainDims = mains.map(function (o) { var v = IC.scene.variant(lib, size, o.id, 'main'); return { w: v.w, h: v.h }; });
     var bgDims = bgs.map(function (o) { var v = IC.scene.variant(lib, size, o.id, 'bg'); return { w: v.w, h: v.h }; });
-    var scale = commonScale(mainDims.length ? mainDims : bgDims, z.area);
+    var scale = commonScale(mainDims.length ? mainDims : bgDims, z.area, !!z.title);
 
     var scene = IC.scene.create(lib, {
       format: format, size: size, schemeId: opts.schemeId, decor: opts.decor, titleZone: zone, scale: scale
