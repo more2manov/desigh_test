@@ -6,6 +6,9 @@
   var lib = window.IC_LIBRARY;
   var FORMATS = IC.scene.FORMATS;
   var STORE_KEY = 'ic.customSchemes';
+  var KEY_STORE = 'ic.apiKey';
+  var AN_STORE = 'ic.analysis';
+  var FALLBACK_MODEL = 'claude-haiku-5-5';
   var VARIANT_COUNT = 6;
   var SEED_STEP = VARIANT_COUNT * 7919 + 101;
   var ROLES = IC.palette.ROLES;
@@ -30,8 +33,10 @@
     variants: [],
     active: -1,
     last: null,
-    custom: []
+    custom: [],
+    analysis: { mode: 'local', model: '' } // ключ API сюда не кладётся: он живёт только в поле ввода
   };
+  var reqId = 0;
   var ed = null;
   var fmtKey = '';
 
@@ -129,8 +134,17 @@
     if (!ed) return;
     var s = ed.getScene();
     var wrap = $('canvas-wrap');
-    var avail = Math.max(200, wrap.clientWidth - 28);
-    var maxH = Math.max(320, (window.innerHeight || 800) - 250);
+    var cs = window.getComputedStyle(wrap);
+    var pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    var avail = Math.max(200, wrap.clientWidth - pad - 2);
+    var maxH = 100000;
+    if ((window.innerWidth || 1200) >= 1000) {
+      // высота холста: окно минус шапка, заголовки и полоса вариантов (замер реальной вёрстки)
+      var col = document.querySelector('.col--center');
+      var cr = col.getBoundingClientRect();
+      var overhead = cr.height - $('canvas').getBoundingClientRect().height + cr.top + (window.pageYOffset || 0) + 12;
+      maxH = Math.max(240, (window.innerHeight || 800) - overhead);
+    }
     var w = Math.min(avail, maxH * s.format.w / s.format.h);
     $('canvas').style.width = Math.round(w) + 'px';
   }
@@ -150,39 +164,135 @@
     return IC.semantic.related(mainIds[0], lib).filter(function (id) { return usedIds.indexOf(id) === -1; }).slice(0, n);
   }
 
-  /** Возвращает {main:[{id}], bg:[{id}], entries:[...], unknown:[...]} или {empty:true, unknown:[...]}. */
+  function scrubKey(str) {
+    str = String(str === undefined || str === null ? '' : str);
+    var k = $('an-key') ? $('an-key').value.trim() : '';
+    return k.length > 3 ? str.split(k).join('***') : str;
+  }
+  function currentModel() {
+    var m = $('an-model').value.trim();
+    return m || (IC.analyzers && IC.analyzers.DEFAULT_MODEL) || FALLBACK_MODEL;
+  }
+
+  function entriesFromIds(main, bg, matchesOf) {
+    var entries = [];
+    main.forEach(function (id) { entries.push({ id: id, kind: 'main', matches: matchesOf(id) }); });
+    bg.forEach(function (id) { entries.push({ id: id, kind: 'bg', matches: matchesOf(id) }); });
+    return entries;
+  }
+
+  /** Метафора через словарь (синхронно, без сети): {main,bg,entries,unknown} или {empty:true,unknown}. */
+  function selectMetaphorDict(text) {
+    var a = IC.semantic.analyze(text, lib);
+    if (!a.ranked.length) return { empty: true, unknown: a.unknown, source: 'local' };
+    var p = IC.semantic.pickForComposition(a.ranked, lib);
+    var byId = {};
+    a.ranked.forEach(function (r) { byId[r.id] = r; });
+    var bgIds = state.withBg ? p.bg : [];
+    return {
+      main: p.main.map(function (id) { return { id: id }; }),
+      bg: bgIds.map(function (id) { return { id: id }; }),
+      entries: entriesFromIds(p.main, bgIds, function (id) { return byId[id] ? byId[id].matches : []; }),
+      unknown: a.unknown, source: 'local'
+    };
+  }
+
+  /** Метафора через IC.analyzers (словарь или LLM). Никогда не отклоняется. */
+  async function selectMetaphorAsync(text, mode) {
+    var model = currentModel();
+    var r;
+    try {
+      r = await IC.analyzers.analyze(text, lib, { mode: mode, apiKey: $('an-key').value.trim(), model: model });
+    } catch (e) {
+      r = { source: 'local', fallback: scrubKey(errText(e)), main: [], bg: [], empty: true, unknown: [], matches: {} };
+    }
+    r = r || {};
+    var info = { source: r.source || 'local', model: model, reason: scrubKey(r.reason || ''), fallback: r.fallback ? scrubKey(r.fallback) : '' };
+    var mainIds = Array.isArray(r.main) ? r.main : [];
+    var bgIds = state.withBg && Array.isArray(r.bg) ? r.bg : [];
+    var unknown = Array.isArray(r.unknown) ? r.unknown : [];
+    if (r.empty || !mainIds.length) return Object.assign({ empty: true, unknown: unknown }, info);
+    var matches = r.matches || {};
+    return Object.assign({
+      main: mainIds.map(function (id) { return { id: id }; }),
+      bg: bgIds.map(function (id) { return { id: id }; }),
+      entries: entriesFromIds(mainIds, bgIds, function (id) { return Array.isArray(matches[id]) ? matches[id] : []; }),
+      unknown: unknown
+    }, info);
+  }
+
+  /** Подбор объектов (синхронно): {main,bg,entries,unknown} или {empty:true,unknown}. Метафора — через словарь. */
   function selectObjects(text) {
+    if (state.mode === 'metaphor') return selectMetaphorDict(text);
     var entries = [], unknown = [], main = [], bg = [];
-    if (state.mode === 'metaphor') {
-      var a = IC.semantic.analyze(text, lib);
-      unknown = a.unknown;
-      if (!a.ranked.length) return { empty: true, unknown: unknown };
-      var p = IC.semantic.pickForComposition(a.ranked, lib);
-      var byId = {};
-      a.ranked.forEach(function (r) { byId[r.id] = r; });
-      var add = function (id, kind) {
-        entries.push({ id: id, kind: kind, matches: byId[id] ? byId[id].matches : [] });
-      };
-      p.main.forEach(function (id) { main.push({ id: id }); add(id, 'main'); });
-      if (state.withBg) p.bg.forEach(function (id) { bg.push({ id: id }); add(id, 'bg'); });
-    } else {
-      var parts = String(text).split(SPLIT).map(function (s) { return s.trim(); }).filter(Boolean);
-      parts.forEach(function (part) {
-        var r = IC.semantic.parseList(part, lib);
-        if (!r.items.length) { unknown.push(part); return; }
-        var first = r.items[0];
-        entries.push({ id: first.id, kind: first.kind, count: r.items.length, word: part });
-        r.items.forEach(function (it) { (it.kind === 'bg' ? bg : main).push({ id: it.id }); });
+    var parts = String(text).split(SPLIT).map(function (s) { return s.trim(); }).filter(Boolean);
+    parts.forEach(function (part) {
+      var r = IC.semantic.parseList(part, lib);
+      if (!r.items.length) { unknown.push(part); return; }
+      var first = r.items[0];
+      entries.push({ id: first.id, kind: first.kind, count: r.items.length, word: part });
+      r.items.forEach(function (it) { (it.kind === 'bg' ? bg : main).push({ id: it.id }); });
+    });
+    if (!main.length && !bg.length) return { empty: true, unknown: unknown };
+    if (state.withBg && !bg.length) {
+      var used = main.map(function (m) { return m.id; });
+      relatedExtra(used, used, 2).forEach(function (id) {
+        bg.push({ id: id }); entries.push({ id: id, kind: 'bg', count: 1, extra: true });
       });
-      if (!main.length && !bg.length) return { empty: true, unknown: unknown };
-      if (state.withBg && !bg.length) {
-        var used = main.map(function (m) { return m.id; });
-        relatedExtra(used, used, 2).forEach(function (id) {
-          bg.push({ id: id }); entries.push({ id: id, kind: 'bg', count: 1, extra: true });
-        });
-      }
     }
     return { main: main, bg: bg, entries: entries, unknown: unknown };
+  }
+
+  /* ---------- подсказка и объяснение ---------- */
+
+  function insertIntoText(str) {
+    var ta = $('build-text');
+    var cur = ta.value.replace(/[\s,;]+$/, '');
+    ta.value = cur ? cur + ', ' + str : str;
+    state.texts[state.mode] = ta.value;
+    ta.focus();
+    try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) { /* не критично */ }
+  }
+
+  function renderHint(box) {
+    var hint = el('div', 'hint');
+    hint.id = 'explain-hint';
+    hint.appendChild(el('p', 'title', 'Примеры запросов — нажмите, чтобы подставить'));
+    var ex = el('div', 'chips chips--hint');
+    ex.id = 'explain-examples';
+    EXAMPLES[state.mode].forEach(function (t) {
+      var c = el('button', 'chip chip--ex', t);
+      c.type = 'button';
+      c.addEventListener('click', function () {
+        var ta = $('build-text');
+        ta.value = t; state.texts[state.mode] = t; ta.focus();
+      });
+      ex.appendChild(c);
+    });
+    hint.appendChild(ex);
+    hint.appendChild(el('p', 'title', 'Доступные объекты — нажмите, чтобы добавить в поле'));
+    var ob = el('div', 'chips chips--hint');
+    ob.id = 'explain-objects';
+    lib.objects.forEach(function (o) {
+      var c = el('button', 'chip chip--obj', o.name.toLowerCase());
+      c.type = 'button';
+      c.setAttribute('data-object-id', o.id);
+      c.title = 'Добавить «' + o.name.toLowerCase() + '» в поле ввода';
+      c.addEventListener('click', function () { insertIntoText(o.name.toLowerCase()); });
+      ob.appendChild(c);
+    });
+    hint.appendChild(ob);
+    box.appendChild(hint);
+  }
+
+  function sourceLine(res) {
+    if (state.mode !== 'metaphor' || !res.source) return null;
+    var text, warn = false;
+    if (res.fallback) { text = res.fallback + ' — использован словарь'; warn = true; }
+    else if (res.source === 'claude') text = 'Источник: Claude (claude.ai)';
+    else if (res.source === 'api') text = 'Источник: Anthropic API (' + (res.model || currentModel()) + ')';
+    else text = 'Источник: словарь';
+    return el('p', 'source' + (warn ? ' is-warn' : ''), text);
   }
 
   function renderExplain(res) {
@@ -190,16 +300,23 @@
     box.textContent = '';
     if (!res) return;
     if (res.empty) {
-      box.appendChild(el('p', 'error', state.mode === 'metaphor'
+      var msg;
+      if (res.noText) msg = state.mode === 'metaphor' ? 'Поле пустое: введите тему или метафору.' : 'Поле пустое: перечислите объекты через запятую.';
+      else msg = state.mode === 'metaphor'
         ? 'Ничего не найдено: ни одно слово не связано с объектами библиотеки. Попробуйте другие слова или вкладку «По объектам».'
-        : 'Ничего не найдено: не удалось распознать ни один объект. Перечислите объекты через запятую.'));
+        : 'Ничего не найдено: не удалось распознать ни один объект. Перечислите объекты через запятую.';
+      box.appendChild(el('p', 'error', msg));
+      if (res.reason && res.source && res.source !== 'local') box.appendChild(el('p', 'note', res.reason));
       if (res.unknown && res.unknown.length) {
         box.appendChild(el('p', 'note', 'Не распознано: ' + res.unknown.join(', ') + '.'));
       }
-      box.appendChild(el('p', 'note', 'В библиотеке есть: ' + lib.objects.map(function (o) { return o.name.toLowerCase(); }).join(', ') + '.'));
+      var sl0 = sourceLine(res);
+      if (sl0) box.appendChild(sl0);
+      renderHint(box);
       return;
     }
     box.appendChild(el('p', 'title', 'Как подобраны объекты'));
+    if (res.reason && res.source && res.source !== 'local') box.appendChild(el('p', 'why', res.reason));
     var ul = el('ul');
     res.entries.forEach(function (en) {
       var li = el('li');
@@ -219,6 +336,8 @@
     if (res.unknown && res.unknown.length) {
       box.appendChild(el('p', 'note', 'Не распознаны: ' + res.unknown.join(', ') + ' — эти слова подбор не учитывал.'));
     }
+    var sl = sourceLine(res);
+    if (sl) box.appendChild(sl);
   }
 
   function layoutOpts(sel) {
@@ -242,15 +361,14 @@
     return sc;
   }
 
-  function doBuild(initial) {
-    var text = $('build-text').value.trim();
-    state.texts[state.mode] = $('build-text').value;
-    if (!text) {
-      renderExplain({ empty: true, unknown: [] });
-      notify('Введите тему или список объектов.', 'warn');
-      return;
-    }
-    var res = selectObjects(text);
+  function setBusy(on) {
+    var b = $('btn-build');
+    b.disabled = on;
+    b.textContent = on ? 'Анализ…' : 'Собрать';
+    b.setAttribute('aria-busy', on ? 'true' : 'false');
+  }
+
+  function applyBuild(res, initial) {
     renderExplain(res);
     if (res.empty) { notify('Ничего не найдено — подробности под кнопкой «Собрать».', 'warn'); return; }
     state.last = { main: res.main, bg: res.bg };
@@ -266,6 +384,33 @@
     } catch (e) {
       notify('Не удалось собрать композицию: ' + errText(e), 'error');
     }
+  }
+
+  function doBuild(initial) {
+    var text = $('build-text').value.trim();
+    state.texts[state.mode] = $('build-text').value;
+    var my = ++reqId;
+    setBusy(false);
+    if (!text) {
+      renderExplain({ empty: true, noText: true, unknown: [] });
+      notify('Введите тему или список объектов.', 'warn');
+      return;
+    }
+    // стартовая композиция и вкладка «По объектам» — только синхронный словарь, без сети
+    if (initial || state.mode !== 'metaphor' || !IC.analyzers || typeof IC.analyzers.analyze !== 'function') {
+      applyBuild(selectObjects(text), initial);
+      return;
+    }
+    setBusy(true);
+    selectMetaphorAsync(text, state.analysis.mode).then(function (res) {
+      if (my !== reqId) return; // устаревший запрос
+      setBusy(false);
+      applyBuild(res, false);
+    }, function (e) {
+      if (my !== reqId) return;
+      setBusy(false);
+      notify('Не удалось выполнить анализ: ' + scrubKey(errText(e)), 'error');
+    });
   }
 
   function moreVariants() {
@@ -303,6 +448,7 @@
       });
       strip.appendChild(b);
     });
+    fitCanvas();
   }
 
   /* ---------- схемы ---------- */
@@ -321,7 +467,7 @@
         var i = el('i'); i.style.background = s.colors[r]; dots.appendChild(i);
       });
       b.appendChild(dots);
-      if (!(box.classList.contains('schemes--compact'))) b.appendChild(el('span', 'scheme__name', s.name));
+      b.appendChild(el('span', 'scheme__name', s.name));
       b.addEventListener('click', function () { setScheme(s.id); });
       row.appendChild(b);
       if (withDelete && s.custom) {
@@ -337,7 +483,6 @@
   }
 
   function renderSchemes() {
-    renderSchemeList($('build-schemes'), false);
     renderSchemeList($('schemes'), true);
   }
 
@@ -606,6 +751,7 @@
         notify('Проект не открыт: ' + errText(e), 'error');
         return;
       }
+      reqId++; setBusy(false);
       state.variants = []; state.active = -1; state.last = null;
       renderStrip();
       applySchemeState(res.scene.schemeId);
@@ -623,6 +769,8 @@
   function setMode(mode, focusTab) {
     if (mode !== state.mode) state.texts[state.mode] = $('build-text').value;
     state.mode = mode;
+    reqId++; setBusy(false);
+    $('analysis-block').hidden = mode !== 'metaphor';
     ['metaphor', 'list'].forEach(function (m) {
       var t = $('tab-' + m), on = m === mode;
       t.classList.toggle('is-active', on);
@@ -647,6 +795,42 @@
     });
     $('explain').textContent = '';
     if (focusTab) $('tab-' + mode).focus();
+  }
+
+  /* ---------- блок «Анализ метафоры» ---------- */
+
+  function saveAnalysis() {
+    try { localStorage.setItem(AN_STORE, JSON.stringify({ mode: state.analysis.mode, model: state.analysis.model })); } catch (e) { /* без хранилища */ }
+  }
+  function storeKey() {
+    try {
+      if ($('an-remember').checked && $('an-key').value) localStorage.setItem(KEY_STORE, $('an-key').value);
+      else localStorage.removeItem(KEY_STORE);
+    } catch (e) { /* без хранилища */ }
+  }
+  function showAnalysisMode() {
+    setSeg($('an-mode'), 'amode', state.analysis.mode);
+    $('an-llm').hidden = state.analysis.mode !== 'llm';
+  }
+  function initAnalysis() {
+    try {
+      var raw = localStorage.getItem(AN_STORE);
+      var a = raw ? JSON.parse(raw) : null;
+      if (a && (a.mode === 'local' || a.mode === 'llm')) state.analysis.mode = a.mode;
+      if (a && typeof a.model === 'string') state.analysis.model = a.model.slice(0, 80);
+      var k = localStorage.getItem(KEY_STORE);
+      if (k) { $('an-key').value = k; $('an-remember').checked = true; }
+    } catch (e) { /* без хранилища */ }
+    $('an-model').value = state.analysis.model;
+    $('an-model').placeholder = (IC.analyzers && IC.analyzers.DEFAULT_MODEL) || FALLBACK_MODEL;
+    showAnalysisMode();
+    initSeg($('an-mode'), 'amode', function (v) {
+      state.analysis.mode = v === 'llm' ? 'llm' : 'local';
+      showAnalysisMode(); saveAnalysis();
+    });
+    $('an-model').addEventListener('input', function () { state.analysis.model = $('an-model').value.trim(); saveAnalysis(); });
+    $('an-key').addEventListener('input', function () { if ($('an-remember').checked) storeKey(); });
+    $('an-remember').addEventListener('change', storeKey);
   }
 
   function afterGeometryChange() {
@@ -798,6 +982,7 @@
     state.custom = loadCustom();
     bindUI();
     setMode('metaphor');
+    initAnalysis();
     setSeg($('seg-size'), 'size', state.size);
     setSeg($('seg-decor'), 'decor', state.decor);
     setSeg($('seg-zone'), 'zone', state.zone);

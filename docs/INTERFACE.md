@@ -1,6 +1,6 @@
 # Контракт интерфейса: src/editor.js ↔ src/app.js
 
-Порядок скриптов в index.html: data/library.js → src/palette.js → src/scene.js → src/semantic.js → src/layout.js → src/editor.js → src/app.js.
+Порядок скриптов в index.html: data/library.js → src/palette.js → src/scene.js → src/semantic.js → src/analyzers.js → src/layout.js → src/editor.js → src/app.js.
 Библиотека: `window.IC_LIBRARY` (lib). Сцена — формат src/scene.js (`{format,size,schemeId,decor,scale,titleZone,items:[{uid,objectId,kind,x,y,rotation,colorShift}]}`).
 
 ## editor.js → `IC.editor.create(container, lib, opts) → ed`
