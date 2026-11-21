@@ -1,0 +1,10 @@
+{
+  "_comment": "Цветовые схемы из макета (страница «Библиотека компонентов»). Роли: bg1..bg3 — цвета фона (можно и в объектах), ink — тёмный контур/тени; obj1..obj3 — цвета объектов (в фоне нельзя), paper — белый. Перекраска заменяет цвет каждой роли исходной схемы на цвет той же роли целевой схемы.",
+  "roles": ["bg1", "bg2", "bg3", "ink", "obj1", "obj2", "obj3", "paper"],
+  "schemes": [
+    {"id": "violet", "name": "Фиолетовая", "colors": {"bg1": "#D7CDF5", "bg2": "#AA9BF0", "bg3": "#7864D7", "ink": "#181817", "obj1": "#F9ECB0", "obj2": "#F9A3AA", "obj3": "#FFE3E1", "paper": "#FFFFFF"}},
+    {"id": "peach",  "name": "Персиковая", "colors": {"bg1": "#FDD7B9", "bg2": "#FAC896", "bg3": "#D27532", "ink": "#181817", "obj1": "#F9ECB0", "obj2": "#80DADA", "obj3": "#BEEBEB", "paper": "#FFFFFF"}},
+    {"id": "teal",   "name": "Бирюзовая",  "colors": {"bg1": "#BEEBEB", "bg2": "#80DADA", "bg3": "#5ABEBE", "ink": "#181817", "obj1": "#FFD4F2", "obj2": "#6D7BFC", "obj3": "#B6C6FE", "paper": "#FFFFFF"}}
+  ],
+  "sourceScheme": "violet"
+}
