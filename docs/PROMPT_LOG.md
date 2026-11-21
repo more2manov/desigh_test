@@ -55,3 +55,17 @@
 
 (Дополнение пользователя к шагу 1, дословно:)
 После первого коммита подключи удалённый репозиторий: git remote add origin https://github.com/more2manov/desigh_test.git, переименуй ветку в main (git branch -M main) и сделай git push -u origin main. В следующих шагах пушь после каждого коммита. Если push попросит авторизацию или выдаст ошибку доступа — остановись и напиши мне, что именно он вывел.
+
+### Итог
+- git init, .gitignore, .gitattributes (LF), docs; первый коммит запушен в github.com/more2manov/desigh_test (main).
+- src/layout.js: автокомпоновка с seed (mulberry32), общий масштаб, оценка перекрытий/видимости/баланса/разнесённости, изометрические слои, фон по краям, зона заголовка, 6 вариантов.
+- tests/run-tests.js + tests/load-ic.js: 12 тестов на node через vm.
+- tools/render-examples.js: 3 примера в examples/ (SVG + PNG через headless Chrome).
+
+### Изменённые файлы
+.gitignore, .gitattributes, docs/PROGRESS.md, docs/PROMPT_LOG.md, src/layout.js, tests/load-ic.js, tests/run-tests.js, tools/render-examples.js, examples/*.svg, examples/*.png
+
+### Проверки
+- node tests/run-tests.js → 12 passed, 0 failed.
+- node tools/render-examples.js → 3 SVG + 3 PNG; PNG просмотрены: зона заголовка пустая, объекты не слиплись.
+- git push -u origin main — успешно.
