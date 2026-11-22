@@ -18,8 +18,8 @@ var EXAMPLES = [
     format: IC.scene.FORMATS[1], size: 'L', schemeId: 'peach', decor: 'peach', titleZone: 'left', withBg: true, seed: 8
   },
   {
-    file: 'lamp-headphones-phone', text: 'лампа, наушники и телефон', mode: 'list',
-    format: IC.scene.FORMATS[2], size: 'L', schemeId: 'teal', decor: 'teal', titleZone: null, withBg: true, seed: 3
+    file: 'lamp-headphones-phone', text: 'лампа наушники фоновый телефон', mode: 'list',
+    format: IC.scene.FORMATS[2], size: 'L', schemeId: 'teal', decor: 'teal', titleZone: null, withBg: true, seed: 5
   }
 ];
 
