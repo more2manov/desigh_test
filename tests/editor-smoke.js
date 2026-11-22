@@ -114,4 +114,27 @@ test('exportPNG без браузера отклоняется понятной 
   return p.then(function () { throw new Error('должно отклониться'); }, function (e) { assert(/Недопустимый размер/.test(e.message)); });
 });
 
+test('смена зоны заголовка: раскладка варианта применяется одним шагом, объекты вне зоны, undo возвращает сцену', function () {
+  var f = { w: 1200, h: 630 };
+  var base = { main: [{ id: 'lamp' }, { id: 'headphones' }, { id: 'phone' }], bg: [], format: f, size: 'L', seed: 11, titleZone: null };
+  ed.setScene(IC.layout.variants(lib, base, 6)[0].scene, { resetHistory: true });
+  ['left', 'top', null].forEach(function (zone) {
+    var before = JSON.stringify(ed.getScene());
+    var o = Object.assign({}, base, { titleZone: zone });
+    var v = IC.layout.variants(lib, o, 6)[0];
+    ed.update(function (s) { var nv = IC.scene.clone(v.scene); s.items = nv.items; s.scale = nv.scale; s.titleZone = nv.titleZone; }, 'titleZone');
+    assert(ed.getScene().titleZone === zone);
+    if (zone) {
+      var z = IC.layout.zones(f.w, f.h, zone).title;
+      IC.layout.compose(lib, Object.assign({}, o, { seed: v.seed })).metrics.items.forEach(function (m) {
+        var ix = Math.min(m.box[2], z[2]) - Math.max(m.box[0], z[0]), iy = Math.min(m.box[3], z[3]) - Math.max(m.box[1], z[1]);
+        assert(!(ix > 0.01 && iy > 0.01), m.objectId + ' в зоне ' + zone);
+      });
+    }
+    ed.undo();
+    assert(JSON.stringify(ed.getScene()) === before, 'undo не вернул сцену');
+    ed.redo();
+  });
+});
+
 setTimeout(function () { console.log('\n' + passed + ' passed, ' + failed + ' failed'); process.exit(failed ? 1 : 0); }, 50);

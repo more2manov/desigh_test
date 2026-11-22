@@ -379,6 +379,7 @@
       var sc = sceneFromVariant(state.variants[0]);
       ed.setScene(sc, initial ? { resetHistory: true } : undefined);
       state.active = 0;
+      markApplied();
       renderStrip();
       syncFromScene(ed.getScene());
       ed.select(null);
@@ -443,7 +444,7 @@
       b.innerHTML = previewMarkup(v.scene, i);
       b.addEventListener('click', function () {
         state.active = i;
-        try { ed.setScene(sceneFromVariant(v)); ed.select(null); syncFromScene(ed.getScene()); }
+        try { ed.setScene(sceneFromVariant(v)); markApplied(); ed.select(null); syncFromScene(ed.getScene()); }
         catch (e) { notify('Не удалось применить вариант: ' + errText(e), 'error'); }
         Array.prototype.forEach.call(strip.children, function (c, k) { c.setAttribute('aria-selected', k === i ? 'true' : 'false'); });
       });
@@ -838,6 +839,42 @@
     if (state.last) { try { computeVariants(); } catch (e) { /* полоса останется прежней */ } }
   }
 
+  function sceneSig() {
+    var sc = ed.getScene();
+    return JSON.stringify([sc.items, sc.scale]);
+  }
+  function markApplied() { state.sig = sceneSig(); }
+
+  // смена формата/зоны: холст сразу получает пересчитанную раскладку (вариант с тем же индексом), один шаг истории
+  function relayout(change, reason) {
+    if (!state.last) { ed.update(change, reason); return; }
+    var edited = state.sig !== undefined && state.sig !== sceneSig();
+    var shifts = {};
+    ed.getScene().items.forEach(function (it) { shifts[it.uid] = it.colorShift; });
+    var idx = state.active >= 0 ? state.active : 0;
+    var vs;
+    try { vs = IC.layout.variants(lib, layoutOpts(state.last), VARIANT_COUNT); }
+    catch (e) { ed.update(change, reason); notify('Не удалось пересчитать раскладку: ' + errText(e), 'error'); return; }
+    state.variants = vs;
+    idx = Math.min(idx, vs.length - 1);
+    state.active = idx;
+    var nv = IC.scene.clone(vs[idx].scene);
+    ed.update(function (s) {
+      change(s);
+      s.items = nv.items.map(function (it) {
+        if (shifts[it.uid] !== undefined) it.colorShift = shifts[it.uid];
+        return it;
+      });
+      s.scale = nv.scale;
+      s.format = nv.format;
+      s.titleZone = nv.titleZone;
+    }, reason);
+    markApplied();
+    renderStrip();
+    syncFromScene(ed.getScene());
+    if (edited) notify('Раскладка пересчитана под зону заголовка. Отменить: Ctrl+Z', 'info');
+  }
+
   function bindUI() {
     // вкладки
     $('tab-metaphor').addEventListener('click', function () { setMode('metaphor'); });
@@ -864,18 +901,19 @@
       var f = FORMATS.filter(function (x) { return x.id === sel.value; })[0];
       if (!f) return;
       state.formatId = f.id;
-      ed.update(function (s) {
+      relayout(function (s) {
         var rx = f.w / s.format.w, ry = f.h / s.format.h;
         s.items.forEach(function (it) { it.x = Math.round(it.x * rx * 100) / 100; it.y = Math.round(it.y * ry * 100) / 100; });
         s.scale = s.scale * Math.min(rx, ry);
         s.format = Object.assign({}, f);
       }, 'format');
-      afterGeometryChange();
     });
 
     initSeg($('seg-size'), 'size', function (v) {
       state.size = v; setSeg($('seg-size'), 'size', v);
+      var clean = state.sig === sceneSig();
       ed.update(function (s) { IC.scene.switchSize(lib, s, v); }, 'size');
+      if (clean) markApplied();
       afterGeometryChange();
     });
     initSeg($('seg-decor'), 'decor', function (v) {
@@ -885,8 +923,7 @@
     });
     initSeg($('seg-zone'), 'zone', function (v) {
       state.zone = v || null; setSeg($('seg-zone'), 'zone', v);
-      ed.update(function (s) { s.titleZone = v || null; }, 'titleZone');
-      afterGeometryChange();
+      relayout(function (s) { s.titleZone = v || null; }, 'titleZone');
     });
     $('chk-bg').addEventListener('change', function () { state.withBg = $('chk-bg').checked; });
 
