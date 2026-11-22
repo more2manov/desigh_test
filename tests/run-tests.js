@@ -286,5 +286,19 @@ test('в SVG нет <image>, у каждого объекта свой <g id>, �
   assert(checked > 100, 'проверено мало объектов');
 });
 
+test('switchSize сохраняет визуальный размер и процент масштаба', function () {
+  function vis(sc) { var a = 0; sc.items.forEach(function (it) { var z = IC.scene.itemSize(lib, sc, it); a += z.w * z.h; }); return Math.sqrt(a); }
+  function pct(sc) { return sc.scale * IC.scene.sizeFactor(lib, sc) * 100; }
+  SETS.forEach(function (set) {
+    var sc = IC.layout.compose(lib, { main: set.main.map(function (id) { return { id: id }; }), bg: set.bg.map(function (id) { return { id: id }; }), format: FORMATS[0], size: 'L', seed: 5 }).scene;
+    var v0 = vis(sc), p0 = pct(sc);
+    IC.scene.switchSize(lib, sc, 'S');
+    assert(Math.abs(vis(sc) - v0) / v0 < 1e-9, set.name + ': визуальный размер изменился в S');
+    assert(Math.abs(pct(sc) - p0) < 1e-9, set.name + ': процент изменился в S');
+    IC.scene.switchSize(lib, sc, 'L');
+    assert(Math.abs(vis(sc) - v0) / v0 < 1e-9 && Math.abs(pct(sc) - p0) < 1e-9, set.name + ': не вернулось в L');
+  });
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

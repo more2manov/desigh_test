@@ -579,7 +579,7 @@
   /* ---------- синхронизация интерфейса со сценой ---------- */
 
   function sizePct(scene) {
-    return Math.round(scene.scale * lib.sizes[scene.size].base / 1000 * 100);
+    return Math.round(scene.scale * IC.scene.sizeFactor(lib, scene) * 100);
   }
 
   function syncFromScene(scene) {
@@ -935,7 +935,7 @@
       raf(function () {
         if (scalePending === null) return;
         var p = scalePending; scalePending = null;
-        ed.update(function (s) { s.scale = p / 100 * 1000 / lib.sizes[s.size].base; }, 'scale');
+        ed.update(function (s) { s.scale = p / 100 / IC.scene.sizeFactor(lib, s); }, 'scale');
       });
     });
 

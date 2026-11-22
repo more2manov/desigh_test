@@ -135,10 +135,30 @@
 
   function clone(scene) { return JSON.parse(JSON.stringify(scene)); }
 
-  /** Смена набора S↔L: объекты меняются на соответствующую детализацию, визуальный размер сохраняется. */
+  /** Площадь объектов сцены в наборе size (нативные размеры, без scale). */
+  function nativeArea(lib, scene, size) {
+    var sum = 0;
+    for (var i = 0; i < scene.items.length; i++) {
+      var it = scene.items[i];
+      var v = variant(lib, size, it.objectId, it.kind);
+      sum += v.w * v.h;
+    }
+    return sum;
+  }
+
+  /** Коэффициент визуального размера: visual = scale * factor; для L равен 1.
+   *  Считается по реальным размерам объектов сцены (S не ровно вдвое меньше L), для пустой сцены - по base. */
+  function sizeFactor(lib, scene, size) {
+    size = size || scene.size;
+    var aL = nativeArea(lib, scene, 'L');
+    if (!scene.items.length || !aL) return lib.sizes[size].base / lib.sizes.L.base;
+    return Math.sqrt(nativeArea(lib, scene, size) / aL);
+  }
+
+  /** Смена набора S<->L: объекты меняются на соответствующую детализацию, визуальный размер сохраняется. */
   function switchSize(lib, scene, size) {
     if (scene.size === size) return scene;
-    scene.scale = scene.scale * lib.sizes[scene.size].base / lib.sizes[size].base;
+    scene.scale = scene.scale * sizeFactor(lib, scene, scene.size) / sizeFactor(lib, scene, size);
     scene.size = size;
     return scene;
   }
@@ -146,6 +166,6 @@
   IC.scene = {
     FORMATS: FORMATS, uid: uid, getObject: getObject, variant: variant, getScheme: getScheme, allSchemes: allSchemes,
     itemSize: itemSize, itemBounds: itemBounds, itemTransform: itemTransform, renderItem: renderItem,
-    render: render, create: create, clone: clone, switchSize: switchSize, layerId: layerId
+    render: render, create: create, clone: clone, switchSize: switchSize, sizeFactor: sizeFactor, layerId: layerId
   };
 })(window.IC = window.IC || {});

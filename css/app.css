@@ -273,3 +273,4 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .chip--obj { color: var(--text); background: var(--surface); border-color: var(--border-strong); }
 .chip--obj:hover, .chip--ex:hover { color: #3d2fa0; background: var(--accent-soft); border-color: var(--accent); }
 .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.field__hint { margin: 6px 0 0; font-size: 11px; line-height: 1.35; color: var(--muted); }
