@@ -157,7 +157,6 @@
 
   /* ---------- сборка: подбор объектов ---------- */
 
-  var SPLIT = /[,;\n]+|\s+и\s+|\s+\+\s+/i;
 
   function relatedExtra(mainIds, usedIds, n) {
     if (!mainIds.length) return [];
@@ -225,13 +224,15 @@
   function selectObjects(text) {
     if (state.mode === 'metaphor') return selectMetaphorDict(text);
     var entries = [], unknown = [], main = [], bg = [];
-    var parts = String(text).split(SPLIT).map(function (s) { return s.trim(); }).filter(Boolean);
-    parts.forEach(function (part) {
-      var r = IC.semantic.parseList(part, lib);
-      if (!r.items.length) { unknown.push(part); return; }
-      var first = r.items[0];
-      entries.push({ id: first.id, kind: first.kind, count: r.items.length, word: part });
-      r.items.forEach(function (it) { (it.kind === 'bg' ? bg : main).push({ id: it.id }); });
+    var r = IC.semantic.parseList(text, lib);
+    unknown = r.unknown.slice();
+    var last = null;
+    r.items.forEach(function (it, i) {
+      (it.kind === 'bg' ? bg : main).push({ id: it.id });
+      var prev = r.items[i - 1];
+      if (last && prev && prev.id === it.id && prev.kind === it.kind && prev.word === it.word) { last.count++; return; }
+      last = { id: it.id, kind: it.kind, count: 1, word: it.word };
+      entries.push(last);
     });
     if (!main.length && !bg.length) return { empty: true, unknown: unknown };
     if (state.withBg && !bg.length) {

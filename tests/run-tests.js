@@ -219,6 +219,36 @@ test('«лампа, наушники и телефон» -> ровно эти т
   assert(same(ids(r.items).sort(), ['headphones', 'lamp', 'phone']), 'получили ' + ids(r.items));
 });
 
+['лампа наушники и телефон','лампа наушники телефон','лампа, наушники, телефон'].forEach(function (q) {
+  test('parseList «' + q + '» -> lamp, headphones, phone', function () {
+    var r = IC.semantic.parseList(q, lib);
+    assert(r.unknown.length === 0, 'неизвестные: ' + r.unknown);
+    assert(same(ids(r.items).sort(), ['headphones', 'lamp', 'phone']), 'получили ' + ids(r.items));
+  });
+});
+test('parseList «фоновые цветы лампа» -> цветы bg, лампа main', function () {
+  var r = IC.semantic.parseList('фоновые цветы лампа', lib);
+  assert(r.items.length === 2, 'получили ' + ids(r.items));
+  assert(r.items[0].id === 'flowers' && r.items[0].kind === 'bg', 'цветы: ' + JSON.stringify(r.items[0]));
+  assert(r.items[1].id === 'lamp' && r.items[1].kind === 'main', 'лампа: ' + JSON.stringify(r.items[1]));
+});
+test('parseList «3 пазла и 2 монеты» -> число к своему объекту', function () {
+  var r = IC.semantic.parseList('3 пазла и 2 монеты', lib);
+  assert(ids(r.items).join() === 'puzzle,puzzle,puzzle,coin,coin', 'получили ' + ids(r.items));
+});
+
+[['лампа, наушники и телефон', 'lamp:main,headphones:main,phone:main'],
+ ['книга, ручка, фоновые цветы', 'book:main,pen:main,flowers:bg'],
+ ['кошелёк, монета и папка', 'wallet:main,coin:main,folder:main'],
+ ['3 пазла', 'puzzle:main,puzzle:main,puzzle:main']].forEach(function (c) {
+  test('чип «' + c[0] + '»', function () {
+    var r = IC.semantic.parseList(c[0], lib);
+    assert(r.unknown.length === 0, 'неизвестные: ' + r.unknown);
+    var got = r.items.map(function (i) { return i.id + ':' + i.kind; }).join(',');
+    assert(got === c[1], 'получили ' + got);
+  });
+});
+
 console.log('Подбор по метафоре');
 var METAPHORS = [
   ['онлайн-обучение', ['book', 'phone']],

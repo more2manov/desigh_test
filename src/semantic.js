@@ -67,28 +67,26 @@
     return { ranked: ranked, unknown: toks.filter(function (t) { return !used[t]; }) };
   }
 
-  /** Сценарий 2. «лампа, наушники, фоновый телефон» → [{id,kind}]. Неизвестные слова возвращаются отдельно. */
+  /** Сценарий 2. «лампа наушники, фоновый телефон» → [{id,kind,word}]. Разбор по словам: каждое слово-алиас — объект;
+   *  маркер фона и число относятся к ближайшему следующему объекту; нераспознанные слова — в unknown. */
   function parseList(text, lib) {
     var idx = index(lib);
-    var parts = String(text).split(/[,;\n]+|\s+и\s+|\s+\+\s+/i).map(function (p) { return p.trim(); }).filter(Boolean);
-    var items = [], unknown = [];
-    parts.forEach(function (p) {
-      var words = tokens(p);
-      var kind = words.some(function (w) { return BG_MARKERS.indexOf(w) !== -1; }) ? 'bg' : 'main';
-      var count = 1;
-      var m = p.match(/(\d+)\s*(шт|x|×)?/i); if (m) count = Math.min(6, Math.max(1, +m[1]));
-      var found = null;
-      words.forEach(function (w) {
-        if (found || BG_MARKERS.indexOf(w) !== -1) return;
-        var s = stem(w);
-        idx.forEach(function (o) { if (!found && o.aliases.some(function (a) { return same(s, a.s); })) found = o.id; });
-      });
-      if (!found) { // запасной вариант: слово похоже на тег ровно одного объекта
-        var a = analyze(p, lib).ranked;
-        if (a.length && (a.length === 1 || a[0].score > a[1].score)) found = a[0].id;
+    var words = (String(text).toLowerCase().replace(/ё/g, 'е').match(/[a-zа-я0-9]+/g) || [])
+      .filter(function (t) { return STOP.indexOf(t) === -1; });
+    var items = [], unknown = [], bg = false, count = 1;
+    words.forEach(function (w) {
+      if (BG_MARKERS.indexOf(w) !== -1) { bg = true; return; }
+      if (/^[0-9]+$/.test(w)) { count = Math.min(6, Math.max(1, +w)); return; }
+      if (w === 'шт' || w === 'x' || w === 'х' || w.length < 2) return;
+      var st = stem(w), found = null;
+      idx.forEach(function (o) { if (!found && o.aliases.some(function (al) { return same(st, al.s); })) found = o.id; });
+      if (!found) { // запасной путь — только для слова, не совпавшего ни с одним алиасом: тег одного объекта
+        var an = analyze(w, lib).ranked;
+        if (an.length && (an.length === 1 || an[0].score > an[1].score)) found = an[0].id;
       }
-      if (found) for (var i = 0; i < count; i++) items.push({ id: found, kind: kind });
-      else unknown.push(p);
+      if (!found) { unknown.push(w); return; }
+      for (var i = 0; i < count; i++) items.push({ id: found, kind: bg ? 'bg' : 'main', word: w });
+      bg = false; count = 1;
     });
     return { items: items, unknown: unknown };
   }
